@@ -46,6 +46,54 @@ def p_train(make_obs_ph_n, act_space_n, p_index, p_func, q_func, optimizer, grad
         p_reg = tf.reduce_mean(tf.square(act_pd.flatparam()))
 
         act_input_n = act_ph_n + []
+        act_input_n[p_index] = act_pd.sample()
+        q_input = tf.concat(obs_ph_n + act_input_n, 1)
+        if local_q_func:
+            q_input = tf.concat([obs_ph_n[p_index], act_input_n[p_index]], 1)
+        q = q_func(q_input, 1, scope="q_func", reuse=True, num_units=num_units)[:,0]
+        pg_loss = -tf.reduce_mean(q)
+
+        loss = pg_loss + p_reg * 1e-3
+
+        optimize_expr = U.minimize_and_clip(optimizer, loss, p_func_vars, grad_norm_clipping)
+
+        # Create callable functions
+        train = U.function(inputs=obs_ph_n + act_ph_n, outputs=loss, updates=[optimize_expr])
+        act = U.function(inputs=[obs_ph_n[p_index]], outputs=act_sample)
+        p_values = U.function([obs_ph_n[p_index]], p)
+
+        # target network
+        target_p = p_func(p_input, int(act_pdtype_n[p_index].param_shape()[0]), scope="target_p_func", num_units=num_units)
+        target_p_func_vars = U.scope_vars(U.absolute_scope_name("target_p_func"))
+        update_target_p = make_update_exp(p_func_vars, target_p_func_vars)
+
+        target_act_sample = act_pdtype_n[p_index].pdfromflat(target_p).sample()
+        target_act = U.function(inputs=[obs_ph_n[p_index]], outputs=target_act_sample)
+
+        return act, train, update_target_p, {'p_values': p_values, 'target_act': target_act}
+
+
+def p_train_adv(make_obs_ph_n, act_space_n, p_index, p_func, q_func, optimizer, grad_norm_clipping=None, local_q_func=False, num_units=64, scope="trainer", reuse=None):
+    with tf.variable_scope(scope, reuse=reuse):
+        # create distribtuions
+        act_pdtype_n = [make_pdtype(act_space) for act_space in act_space_n]
+
+        # set up placeholders
+        obs_ph_n = make_obs_ph_n
+        act_ph_n = [act_pdtype_n[i].sample_placeholder([None], name="action"+str(i)) for i in range(len(act_space_n))]
+
+        p_input = obs_ph_n[p_index]
+
+        p = p_func(p_input, int(act_pdtype_n[p_index].param_shape()[0]), scope="p_func", num_units=num_units)
+        p_func_vars = U.scope_vars(U.absolute_scope_name("p_func"))
+
+        # wrap parameters in distribution
+        act_pd = act_pdtype_n[p_index].pdfromflat(p)
+
+        act_sample = act_pd.sample()
+        p_reg = tf.reduce_mean(tf.square(act_pd.flatparam()))
+
+        act_input_n = act_ph_n + []
 
         # changed
         sample = act_pd.sample()
@@ -58,24 +106,31 @@ def p_train(make_obs_ph_n, act_space_n, p_index, p_func, q_func, optimizer, grad
         q = q_func(q_input, 1, scope="q_func", reuse=True, num_units=num_units)[:,0]
 
         ## Modifications here
-        v = tf.constant([0], dtype=tf.float32) # variable for value function
+        ## Create values vector: auto solve rows by 1 column
+        v = tf.tile([0.0], [tf.shape(sample)[0]]) # variable for value function
         for i in range(act_space_n[p_index].n):
-            shape = sample.shape
-            mask = np.ndarray(shape=shape, dtype=bool)
-            for j in range(shape[0]):
-                mask[j, i] = True
+            # create row tensor with ith element as 1, actions are one-hot
+            a = np.zeros((1, act_space_n[p_index].n), dtype=np.float32)
+            a[0, i] = 1
+            a = tf.convert_to_tensor(a)
 
-            masked_sample = tf.boolean_mask(sample, mask)
+            # tile this row tensor automatic number of times
+            a = tf.tile(a, [tf.shape(sample)[0], 1])
+
             act_input = act_ph_n + []
-            act_input[p_index] = tf.convert_to_tensor(nparr) # set up input as P(taking action i) = 1
-            q_input_tmp = tf.concat(obs_ph_n + act_input, 1) # add observation to input
+            act_input[p_index] = tf.convert_to_tensor(a)
+            q_input_tmp = tf.concat(obs_ph_n + act_input, 1)
             if local_q_func:
                 q_input_tmp = tf.concat([obs_ph_n[p_index], act_input_n[p_index]], 1)
             # add Q(a[i], s) * pi(a[i]) to value
-            v = tf.math.add(v, q_func(q_input_tmp, 1, scope="q_func", reuse=True, num_units=num_units)[:,0] * act_pd.sample()[i])
+            p_i = act_pd.logits[:, i]
+            # tmp is q values for action i multiplied by probability of taking action i
+            tmp = tf.multiply(q_func(q_input_tmp, 1, scope="q_func", reuse=True, num_units=num_units)[:,0], p_i)
+            v = tf.add(v, tmp)
 
+        a = tf.subtract(v, q)
         # loss is equal to advantage
-        pg_loss = -tf.reduce_mean(q - v)
+        pg_loss = -tf.reduce_mean(a)
         ## Modifications end
 
         loss = pg_loss + p_reg * 1e-3
@@ -144,13 +199,6 @@ class MADDPGAgentTrainer(AgentTrainer):
         for i in range(self.n):
             obs_ph_n.append(U.BatchInput(obs_shape_n[i], name="observation"+str(i)).get())
 
-        print(name)
-        print(model)
-        print(obs_shape_n)
-        print(act_space_n)
-        print(agent_index)
-        print(args)
-
         # Create all the functions necessary to train the model
         self.q_train, self.q_update, self.q_debug = q_train(
             scope=self.name,
@@ -163,7 +211,8 @@ class MADDPGAgentTrainer(AgentTrainer):
             local_q_func=local_q_func,
             num_units=args.num_units
         )
-        self.act, self.p_train, self.p_update, self.p_debug = p_train(
+
+        self.act, self.p_train, self.p_update, self.p_debug = p_train_adv(
             scope=self.name,
             make_obs_ph_n=obs_ph_n,
             act_space_n=act_space_n,
