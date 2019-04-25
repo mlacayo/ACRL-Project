@@ -5,10 +5,10 @@ import numpy as np
 class SMACEnv(Env):
     def __init__(
         self,
-        map_name="8m",
+        map_name="2m_vs_1z",
         step_mul=None,
         move_amount=2,
-        difficulty="7",
+        difficulty="1",
         game_version=None,
         seed=None,
         continuing_episode=False,
@@ -87,7 +87,8 @@ class SMACEnv(Env):
                                    episode_limit})
         """
         # Run actions
-        reward, terminated, info = self.env.step(actions)
+        scactions = [np.argmax(a) for a in actions]
+        reward, terminated, info = self.env.step(scactions)
 
         # Get update
         observations = self.env.get_obs()

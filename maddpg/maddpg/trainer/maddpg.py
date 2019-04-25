@@ -148,8 +148,19 @@ class MADDPGAgentTrainer(AgentTrainer):
         self.max_replay_buffer_len = args.batch_size * args.max_episode_len
         self.replay_sample_index = None
 
+    # mask is ndarray of 1s and 0s denoting legal/illegal actions
     def action(self, obs):
-        return self.act(obs[None])[0]
+        # ndarray of action probabilities
+        if type(obs) == tuple:
+            # zero out probabilities of illegal actions and renormalize
+            actions = self.act(obs[0][None])[0]
+            actions = actions * obs[1]
+            actions = actions / np.linalg.norm(actions)
+        else:
+            actions = self.act(obs[None])[0]
+
+        return actions
+
 
     def experience(self, obs, act, rew, new_obs, done, terminal):
         # Store transition in the replay buffer.
@@ -159,7 +170,7 @@ class MADDPGAgentTrainer(AgentTrainer):
         self.replay_sample_index = None
 
     def update(self, agents, t):
-        if len(self.replay_buffer) < self.max_replay_buffer_len: # replay buffer is not large enough
+        if len(self.replay_buffer) < self.max_replay_buffer_len:  # replay buffer is not large enough
             return
         if not t % 100 == 0:  # only update every 100 steps
             return
@@ -189,6 +200,58 @@ class MADDPGAgentTrainer(AgentTrainer):
 
         # train p network
         p_loss = self.p_train(*(obs_n + act_n))
+
+        self.p_update()
+        self.q_update()
+
+        return [q_loss, p_loss, np.mean(target_q), np.mean(rew), np.mean(target_q_next), np.std(target_q)]
+
+    def update_sc(self, agents, t):
+        if len(self.replay_buffer) < self.max_replay_buffer_len: # replay buffer is not large enough
+            return
+        if not t % 100 == 0:  # only update every 100 steps
+            return
+
+        self.replay_sample_index = self.replay_buffer.make_index(self.args.batch_size)
+        # collect replay sample from all agents
+        obs_n = []
+        obs_next_n = []
+        act_n = []
+        index = self.replay_sample_index
+        for i in range(self.n):
+            obs, act, rew, obs_next, done = agents[i].replay_buffer.sample_index(index)
+            obs_n.append(obs)
+            obs_next_n.append(obs_next)
+            act_n.append(act)
+        obs, act, rew, obs_next, done = self.replay_buffer.sample_index(index)
+
+        # train q network
+        num_sample = 1
+        target_q = 0.0
+        obs_next = []
+        for i in range(self.n):
+            obs_next_tmp = np.zeros((obs_next_n[i].shape[0], obs_next_n[i][0][0].shape[0]))
+            for j in range(obs_next_tmp.shape[0]):
+                obs_next_tmp[j, :] = obs_next_n[i][j][0]
+            obs_next.append(obs_next_tmp)
+
+
+        for i in range(num_sample):
+            target_act_next_n = [agents[i].p_debug['target_act'](obs_next[i]) for i in range(self.n)]
+            target_q_next = self.q_debug['target_q_values'](*(obs_next + target_act_next_n))
+            target_q += rew + self.args.gamma * (1.0 - done) * target_q_next
+        target_q /= num_sample
+        obs_n_tmp = []
+        for i in range(self.n):
+            obs_tmp = np.zeros((obs_n[i].shape[0], obs_n[i][0][0].shape[0]))
+            for j in range(obs_tmp.shape[0]):
+                obs_tmp[j, :] = obs_n[i][j][0]
+            obs_n_tmp.append(obs_tmp)
+
+        q_loss = self.q_train(*(obs_n_tmp + act_n + [target_q]))
+
+        # train p network
+        p_loss = self.p_train(*(obs_n_tmp + act_n))
 
         self.p_update()
         self.q_update()
