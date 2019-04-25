@@ -154,8 +154,9 @@ class MADDPGAgentTrainer(AgentTrainer):
         if type(obs) == tuple:
             # zero out probabilities of illegal actions and renormalize
             actions = self.act(obs[0][None])[0]
+            actions = actions + 0.01
             actions = actions * obs[1]
-            actions = actions / np.linalg.norm(actions)
+            # actions = actions / (np.linalg.norm(actions) + 0.00001)
         else:
             actions = self.act(obs[None])[0]
 
