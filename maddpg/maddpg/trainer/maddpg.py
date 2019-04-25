@@ -128,8 +128,9 @@ def p_train_adv(make_obs_ph_n, act_space_n, p_index, p_func, q_func, optimizer, 
             tmp = tf.multiply(q_func(q_input_tmp, 1, scope="q_func", reuse=True, num_units=num_units)[:,0], p_i)
             v = tf.add(v, tmp)
 
+        a = tf.subtract(v, q)
         # loss is equal to advantage
-        pg_loss = -tf.reduce_mean(v - q)
+        pg_loss = -tf.reduce_mean(a)
         ## Modifications end
 
         loss = pg_loss + p_reg * 1e-3
