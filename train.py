@@ -5,7 +5,7 @@ import time
 import pickle
 
 import maddpg.common.tf_util as U
-from maddpg.trainer.maddpg import MADDPGAgentTrainer
+from maddpg_advantage import MADDPGAdvantageAgentTrainer
 import tensorflow.contrib.layers as layers
 
 def parse_args():
@@ -63,7 +63,7 @@ def make_env(scenario_name, arglist, benchmark=False):
 def get_trainers(env, num_adversaries, obs_shape_n, arglist):
     trainers = []
     model = mlp_model
-    trainer = MADDPGAgentTrainer
+    trainer = MADDPGAdvantageAgentTrainer
     for i in range(num_adversaries):
         trainers.append(trainer(
             "agent_%d" % i, model, obs_shape_n, env.action_space, i, arglist,
@@ -187,6 +187,7 @@ def train(arglist):
                     pickle.dump(final_ep_ag_rewards, fp)
                 print('...Finished total of {} episodes.'.format(len(episode_rewards)))
                 break
+
 
 if __name__ == '__main__':
     arglist = parse_args()

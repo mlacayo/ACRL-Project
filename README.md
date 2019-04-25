@@ -6,7 +6,7 @@ $ pip install -e ./maddpg/
 ```
 
 # Training
-Run `python ./experiments/train.py`.
+Run `python ./train.py`. Follow documentation in [maddpg documentation](./maddpg/README.md).
 
 All modifications to the MADDPG algorithm are in the p_train_adv function of maddpg`.py`
 
