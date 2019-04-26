@@ -61,6 +61,10 @@ class SMACEnv(Env):
 
         self.state = None
 
+    @property
+    def max_episode_len(self):
+        return self.env.episode_limit
+
     def get_avail_actions(self):
         return self.env.get_avail_actions()
     

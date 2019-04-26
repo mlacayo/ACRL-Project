@@ -18,7 +18,7 @@ def parse_args():
     parser.add_argument("--scenario", type=str, default="simple", help="name of the scenario script, or smac for Starcraft Multi Agent Challenge")
     parser.add_argument("--replay-dir", type=str, default="./experiments/replays", help="directory in which replays are saved")
     parser.add_argument("--map", type=str, default="8m", help="If using SMAC, the starcraft map to train on")
-    parser.add_argument("--max-episode-len", type=int, default=25, help="maximum episode length")
+    parser.add_argument("--max-episode-len", type=int, default=0, help="maximum episode length")
     parser.add_argument("--num-episodes", type=int, default=60000, help="number of episodes")
     parser.add_argument("--num-adversaries", type=int, default=0, help="number of adversaries")
     parser.add_argument("--good-policy", type=str, default="maddpg", help="policy for good agents")
@@ -58,6 +58,7 @@ def make_env(scenario_name, arglist, benchmark=False):
     if scenario_name == "starcraft" or scenario_name == "smac":
         # Make a Starcraft environment
         env = SMACEnv(map_name=arglist.map, replay_prefix=arglist.exp_name, replay_dir=arglist.save_dir)
+        max_episode_len = arglist.max_episode_len or env.max_episode_len
     else:
         # Make a multiagent world environment
         from multiagent.environment import MultiAgentEnv
@@ -71,7 +72,9 @@ def make_env(scenario_name, arglist, benchmark=False):
             env = MultiAgentEnv(world, scenario.reset_world, scenario.reward, scenario.observation, scenario.benchmark_data)
         else:
             env = MultiAgentEnv(world, scenario.reset_world, scenario.reward, scenario.observation)
-    return env
+
+        max_episode_len = arglist.max_episode_len or 25
+    return env, max_episode_len
 
 def get_trainers(env, num_adversaries, obs_shape_n, arglist):
     trainers = []
@@ -95,7 +98,7 @@ def get_trainers(env, num_adversaries, obs_shape_n, arglist):
 def train(arglist):
     with U.single_threaded_session():
         # Create environment
-        env = make_env(arglist.scenario, arglist, arglist.benchmark)
+        env, max_episode_len = make_env(arglist.scenario, arglist, arglist.benchmark)
         # Create agent trainers
         obs_shape_n = [env.observation_space[i].shape for i in range(env.n)]
 
@@ -132,7 +135,7 @@ def train(arglist):
             new_obs_n, rew_n, done_n, info_n = env.step(action_n)
             episode_step += 1
             done = all(done_n)
-            terminal = (episode_step >= arglist.max_episode_len)
+            terminal = (episode_step >= max_episode_len)
             # collect experience
             for i, agent in enumerate(trainers):
                 agent.experience(obs_n[i], action_n[i], rew_n[i], new_obs_n[i], done_n[i], terminal)
