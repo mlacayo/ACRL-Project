@@ -6,7 +6,7 @@ class SMACEnv(Env):
     def __init__(
         self,
         map_name="8m",
-        step_mul=8, # There seems to be a bug in SMAC because it's in beta but it should be 8
+        step_mul=None,
         move_amount=2,
         difficulty="7",
         game_version=None,
@@ -87,7 +87,7 @@ class SMACEnv(Env):
                                    episode_limit})
         """
         # Run actions
-        actions = [np.argmax(action_scores * mask) for action_scores, mask in zip(actions, self.get_avail_actions())]
+        actions = [np.argmax((action_scores+.0001) * mask) for action_scores, mask in zip(actions, self.get_avail_actions())]
         reward, terminated, info = self.env.step(actions)
 
         # Get updated state

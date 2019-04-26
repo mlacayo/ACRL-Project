@@ -57,7 +57,7 @@ def make_env(scenario_name, arglist, benchmark=False):
 
     if scenario_name == "starcraft" or scenario_name == "smac":
         # Make a Starcraft environment
-        env = SMACEnv(map_name=arglist.map, replay_prefix=arglist.exp_name, replay_dir=arglist.save_dir)
+        env = SMACEnv(map_name=arglist.map, replay_prefix=arglist.exp_name, replay_dir=arglist.replay_dir)
         max_episode_len = arglist.max_episode_len or env.max_episode_len
     else:
         # Make a multiagent world environment
