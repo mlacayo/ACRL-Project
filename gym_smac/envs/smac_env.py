@@ -5,10 +5,10 @@ import numpy as np
 class SMACEnv(Env):
     def __init__(
         self,
-        map_name="2m_vs_1z",
+        map_name="8m",
         step_mul=None,
         move_amount=2,
-        difficulty="1",
+        difficulty="7",
         game_version=None,
         seed=None,
         continuing_episode=False,
@@ -55,15 +55,14 @@ class SMACEnv(Env):
 
         for _ in range(self.n):
             self.action_space.append(spaces.Discrete(num_actions))
-            self.observation_space.append(spaces.Tuple((
-                                                spaces.Box(low=-1.0, high=1.0,
+            self.observation_space.append(spaces.Box(low=-1.0, high=1.0,
                                                            shape=(self.env.get_obs_size(),),
-                                                           dtype=np.float32),
-                                                spaces.MultiBinary(num_actions)
-                                            ))
-                                        )
+                                                           dtype=np.float32))
 
         self.state = None
+
+    def get_avail_actions(self):
+        return self.env.get_avail_actions()
     
     def step(self, actions):
         """steps the simulation forward one timestep
@@ -74,11 +73,8 @@ class SMACEnv(Env):
         
         Returns:
             Tuple(observations, reward, terminated, info) -- Tuple of results from taking action
-                - observations {Tuple(observations, available_actions)}
-                    - observations {np.ndarray[]} -- Array of ndarrays of size env.get_obs_size()
-                                                     representing each agent's observations
-                    - available_actions {integer[]} -- Array of integers of length num_actions where 1
-                                                       means action is available and 0 means not available
+                - observations {ndarray[]} -- Array of ndarrays of size env.get_obs_size()
+                                              representing each agent's observations
                 - reward {integer[]} -- Array of rewards for each agent (Each reward is the same total
                                         reward / num_agents from the battle)
                 - terminated {bool[]} -- Array of booleans representing whether the battle has ended (Same
@@ -87,28 +83,24 @@ class SMACEnv(Env):
                                    episode_limit})
         """
         # Run actions
-        scactions = [np.argmax(a) for a in actions]
-        reward, terminated, info = self.env.step(scactions)
+        actions = [np.argmax(action_scores * mask) for action_scores, mask in zip(actions, self.get_avail_actions())]
+        reward, terminated, info = self.env.step(actions)
 
-        # Get update
-        observations = self.env.get_obs()
-        avail_actions = self.env.get_avail_actions()
+        # Get updated state
         self.state = self.env.get_state()
 
         # Return arrays for each agent
         reward_n = [reward / self.n for _ in range(self.n)]
         terminated_n = [terminated for _ in range(self.n)]
         info_n = [info for _ in range(self.n)]
-        observation_n = [(obs, acts) for obs, acts in zip(observations, avail_actions)]
+        observation_n =  self.env.get_obs()
 
         return observation_n, reward_n, terminated_n, info_n
 
     def reset(self):
-        """Returns the observations, available actions tuple"""
+        """Returns the initial observations"""
         self.env.reset()
-        observations = self.env.get_obs()
-        avail_actions = self.env.get_avail_actions()
-        return [(obs, acts) for obs, acts in zip(observations, avail_actions)]
+        return self.env.get_obs()
 
 
     def render(self, mode='human'):

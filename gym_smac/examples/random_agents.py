@@ -6,8 +6,7 @@ class RandomAgent():
         self.act_space = action_space
     
     def action(self, obs):
-        avail_actions = obs[1]
-        return np.random.choice(np.nonzero(avail_actions)[0])
+        return np.random.uniform(size=self.act_space.n)
 
     
 

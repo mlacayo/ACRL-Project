@@ -88,6 +88,8 @@ def p_train_adv(make_obs_ph_n, act_space_n, p_index, p_func, q_func, optimizer, 
         return act, train, update_target_p, {'p_values': p_values, 'target_act': target_act}
 
 class MADDPGAdvantageAgentTrainer(MADDPGAgentTrainer):
+    """Implements MADDPGAgentTrainer, but replaces the actor critic with an advantage function
+    """
     def __init__(self, name, model, obs_shape_n, act_space_n, agent_index, args, local_q_func=False):
         self.name = name
         self.n = len(obs_shape_n)
