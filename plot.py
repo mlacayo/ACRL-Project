@@ -54,13 +54,6 @@ def main(arglist):
         plt.figure("Rewards")
         plt.plot(episode, reward, label=exp)
 
-        print(infos[exp][0])
-
-        # info = infos[exp]
-        # battle_won = [1 * ep['battle_won'] for ep in info if ]
-        # print(battle_won)
-
-
 
     # Save plots
     if arglist.plot_name:

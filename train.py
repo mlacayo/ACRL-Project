@@ -61,7 +61,7 @@ def make_env(scenario_name, arglist, benchmark=False):
 
     if scenario_name == "starcraft" or scenario_name == "smac":
         # Make a Starcraft environment
-        env = SMACEnv(map_name=arglist.map, replay_prefix=arglist.exp_name, replay_dir=arglist.replay_dir, game_version=arglist.version)
+        env = SMACEnv(map_name=arglist.map, replay_prefix=arglist.exp_name, replay_dir=arglist.replay_dir, game_version=arglist.version, step_mul=8)
         max_episode_len = arglist.max_episode_len or env.max_episode_len
     else:
         # Make a multiagent world environment
@@ -179,7 +179,10 @@ def train(arglist):
             # for displaying learned policies
             if arglist.display:
                 time.sleep(0.1)
-                env.render()
+                if isinstance(env, SMACEnv):
+                    env.save_replay()
+                else:
+                    env.render()
                 continue
 
             # update all trainers, if not in display or benchmark mode
