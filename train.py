@@ -1,6 +1,7 @@
 import argparse
 import pickle
 import time
+from os.path import abspath
 
 import numpy as np
 import tensorflow as tf
@@ -16,9 +17,12 @@ def parse_args():
     parser = argparse.ArgumentParser("Reinforcement Learning experiments for multiagent environments")
     # Environment
     parser.add_argument("--scenario", type=str, default="simple", help="name of the scenario script, or smac for Starcraft Multi Agent Challenge")
-    parser.add_argument("--replay-dir", type=str, default="./experiments/replays", help="directory in which replays are saved")
-    parser.add_argument("--map", type=str, default="8m", help="If using SMAC, the starcraft map to train on")
     parser.add_argument("--max-episode-len", type=int, default=0, help="maximum episode length")
+    # Starcraft Environment
+    parser.add_argument("--replay-dir", type=str, default=abspath("./experiments/replays/"), help="directory in which replays are saved")
+    parser.add_argument("--map", type=str, default="8m", help="If using SMAC, the starcraft map to train on")
+    parser.add_argument("--version", type=str, default=None, help="Starcraft version")
+    # Episodes
     parser.add_argument("--num-episodes", type=int, default=60000, help="number of episodes")
     parser.add_argument("--num-adversaries", type=int, default=0, help="number of adversaries")
     parser.add_argument("--good-policy", type=str, default="maddpg", help="policy for good agents")
@@ -33,7 +37,7 @@ def parse_args():
     # Checkpointing
     parser.add_argument("--exp-name", type=str, default=None, help="name of the experiment")
     parser.add_argument("--save-dir", type=str, default="./experiments/policy/", help="directory in which training state and model should be saved")
-    parser.add_argument("--save-rate", type=int, default=1000, help="save model once every time this many episodes are completed")
+    parser.add_argument("--save-rate", type=int, default=300, help="save model once every time this many episodes are completed")
     parser.add_argument("--load-dir", type=str, default="./experiments/policy/", help="directory in which training state and model are loaded")
     # Evaluation
     parser.add_argument("--restore", action="store_true", default=False)
@@ -57,7 +61,7 @@ def make_env(scenario_name, arglist, benchmark=False):
 
     if scenario_name == "starcraft" or scenario_name == "smac":
         # Make a Starcraft environment
-        env = SMACEnv(map_name=arglist.map, replay_prefix=arglist.exp_name, replay_dir=arglist.replay_dir)
+        env = SMACEnv(map_name=arglist.map, replay_prefix=arglist.exp_name, replay_dir=arglist.replay_dir, game_version=arglist.version)
         max_episode_len = arglist.max_episode_len or env.max_episode_len
     else:
         # Make a multiagent world environment
@@ -121,6 +125,7 @@ def train(arglist):
         final_ep_rewards = []  # sum of rewards for training curve
         final_ep_ag_rewards = []  # agent rewards for training curve
         agent_info = [[[]]]  # placeholder for benchmarking info
+        info = []
         saver = tf.train.Saver()
         obs_n = env.reset()
         episode_step = 0
@@ -145,6 +150,8 @@ def train(arglist):
                 episode_rewards[-1] += rew
                 agent_rewards[i][-1] += rew
 
+            # For SC2 Info
+
             if done or terminal:
                 obs_n = env.reset()
                 episode_step = 0
@@ -152,6 +159,7 @@ def train(arglist):
                 for a in agent_rewards:
                     a.append(0)
                 agent_info.append([[]])
+                info.append(info_n[0])
 
             # increment global step counter
             train_step += 1
@@ -209,6 +217,10 @@ def train(arglist):
                 agrew_file_name = arglist.plots_dir + arglist.exp_name + '_agrewards.pkl'
                 with open(agrew_file_name, 'wb') as fp:
                     pickle.dump(final_ep_ag_rewards, fp)
+                info_file_name = arglist.plots_dir + arglist.exp_name + '_info.pkl'
+                with open(info_file_name, 'wb') as fp:
+                    pickle.dump(info, fp)
+                
                 print('...Finished total of {} episodes.'.format(len(episode_rewards)))
                 break
 

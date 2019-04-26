@@ -1,0 +1,12 @@
+map: 2m_vs_1z
+save every 1000
+used MADDPG_Advantage
+
+steps: 149850, episodes: 1000, mean episode reward: 2.6774444444444447, time: 1047.309
+steps: 299795, episodes: 2000, mean episode reward: 4.760555555555556, time: 1013.786
+steps: 449748, episodes: 3000, mean episode reward: 4.632666666666668, time: 1012.074
+steps: 899619,  episodes: 6000, mean episode reward: 4.674833333333334, time: 1029.214
+steps: 1049475, episodes: 7000, mean episode reward: 4.765888888888891, time: 1028.627
+steps: 1199415, episodes: 8000, mean episode reward: 4.579555555555556, time: 1021.012
+steps: 1349351, episodes: 9000, mean episode reward: 4.491333333333336, time: 1020.306
+steps: 1499224, episodes: 10000, mean episode reward: 4.508166666666668, time: 1023.472
