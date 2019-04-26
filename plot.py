@@ -46,6 +46,13 @@ def main(arglist):
     plt.xlabel('Episodes')
     plt.ylabel('Reward')
 
+    n = 2000
+    plt.figure("games_won")
+    plt.title("Percentage of Games Won During Training per {} Episodes".format(n))
+    plt.xlabel('Episodes')
+    plt.ylabel('Percentage of Games Won')
+
+
     # Plot each experiment
     for exp in arglist.experiments:
         reward = rewards[exp]
@@ -54,6 +61,13 @@ def main(arglist):
         plt.figure("Rewards")
         plt.plot(episode, reward, label=exp)
 
+        games_won = [1 * info['battle_won'] for info in infos[exp] if 'battle_won' in info]
+        percentage_games_won = []
+        for i in range(len(games_won) // n):
+            percentage_games_won.append(np.sum(games_won[i*n:(i+1)*n]) / n)
+        episode = np.arange(0, len(percentage_games_won)) * n
+        plt.figure("games_won")
+        plt.plot(episode, percentage_games_won, label=exp)
 
     # Save plots
     if arglist.plot_name:
@@ -64,6 +78,10 @@ def main(arglist):
     plt.figure("Rewards")
     plt.legend(loc='lower right')
     plt.savefig(path + 'rewards.png')
+
+    plt.figure("games_won")
+    plt.legend(loc='lower right')
+    plt.savefig(path + 'wins.png')
 
 if __name__ == "__main__":
     arglist = parse_args()
