@@ -3,20 +3,25 @@ import numpy as np
 import tensorflow as tf
 import time
 import pickle
+from gym import spaces
 
 import maddpg.common.tf_util as U
+from maddpg.trainer.maddpg import MADDPGAgentTrainer
 from maddpg_advantage import MADDPGAdvantageAgentTrainer
 import tensorflow.contrib.layers as layers
 
 def parse_args():
     parser = argparse.ArgumentParser("Reinforcement Learning experiments for multiagent environments")
     # Environment
-    parser.add_argument("--scenario", type=str, default="simple", help="name of the scenario script")
+    parser.add_argument("--scenario", type=str, default="simple", help="name of the scenario script, or smac for Starcraft Multi Agent Challenge")
+    parser.add_argument("--map", type=str, default="8m", help="If using SMAC, the starcraft map to train on")
     parser.add_argument("--max-episode-len", type=int, default=25, help="maximum episode length")
     parser.add_argument("--num-episodes", type=int, default=60000, help="number of episodes")
     parser.add_argument("--num-adversaries", type=int, default=0, help="number of adversaries")
     parser.add_argument("--good-policy", type=str, default="maddpg", help="policy for good agents")
     parser.add_argument("--adv-policy", type=str, default="maddpg", help="policy of adversaries")
+    # Type of Trainer
+    parser.add_argument("--trainer", type=str, choices=["MADDPG", "MADDPG_Advantage"], default="MADDPG_Advantage", help="type of trainer to use")
     # Core training parameters
     parser.add_argument("--lr", type=float, default=1e-2, help="learning rate for Adam optimizer")
     parser.add_argument("--gamma", type=float, default=0.95, help="discount factor")
@@ -46,24 +51,34 @@ def mlp_model(input, num_outputs, scope, reuse=False, num_units=64, rnn_cell=Non
         return out
 
 def make_env(scenario_name, arglist, benchmark=False):
-    from multiagent.environment import MultiAgentEnv
-    import multiagent.scenarios as scenarios
 
-    # load scenario from script
-    scenario = scenarios.load(scenario_name + ".py").Scenario()
-    # create world
-    world = scenario.make_world()
-    # create multiagent environment
-    if benchmark:
-        env = MultiAgentEnv(world, scenario.reset_world, scenario.reward, scenario.observation, scenario.benchmark_data)
+    if scenario_name == "starcraft" or scenario_name == "smac":
+        # Make a Starcraft environment
+        from gym_smac.envs import SMACEnv
+        env = SMACEnv(map_name=arglist.map)
     else:
-        env = MultiAgentEnv(world, scenario.reset_world, scenario.reward, scenario.observation)
+        # Make a multiagent world environment
+        from multiagent.environment import MultiAgentEnv
+        import multiagent.scenarios as scenarios
+        # load scenario from script
+        scenario = scenarios.load(scenario_name + ".py").Scenario()
+        # create world
+        world = scenario.make_world()
+        # create multiagent environment
+        if benchmark:
+            env = MultiAgentEnv(world, scenario.reset_world, scenario.reward, scenario.observation, scenario.benchmark_data)
+        else:
+            env = MultiAgentEnv(world, scenario.reset_world, scenario.reward, scenario.observation)
     return env
 
 def get_trainers(env, num_adversaries, obs_shape_n, arglist):
     trainers = []
     model = mlp_model
-    trainer = MADDPGAdvantageAgentTrainer
+    if arglist.trainer == "MADDPG_Advantage":
+        trainer = MADDPGAdvantageAgentTrainer
+    else:
+        trainer = MADDPGAgentTrainer
+        
     for i in range(num_adversaries):
         trainers.append(trainer(
             "agent_%d" % i, model, obs_shape_n, env.action_space, i, arglist,
@@ -80,7 +95,14 @@ def train(arglist):
         # Create environment
         env = make_env(arglist.scenario, arglist, arglist.benchmark)
         # Create agent trainers
-        obs_shape_n = [env.observation_space[i].shape for i in range(env.n)]
+        obs_shape_n = []
+
+        for obs_space in env.observation_space:
+            if isinstance(obs_space, spaces.Tuple):
+                obs_shape_n.append(obs_space[0].shape)
+            else:
+                obs_shape_n.append(obs_space.shape)
+
         num_adversaries = min(env.n, arglist.num_adversaries)
         trainers = get_trainers(env, num_adversaries, obs_shape_n, arglist)
         print('Using good policy {} and adv policy {}'.format(arglist.good_policy, arglist.adv_policy))
