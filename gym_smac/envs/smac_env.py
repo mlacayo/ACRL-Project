@@ -6,7 +6,7 @@ class SMACEnv(Env):
     def __init__(
         self,
         map_name="8m",
-        step_mul=None,
+        step_mul=8, # There seems to be a bug in SMAC because it's in beta but it should be 8
         move_amount=2,
         difficulty="7",
         game_version=None,
@@ -101,6 +101,9 @@ class SMACEnv(Env):
         """Returns the initial observations"""
         self.env.reset()
         return self.env.get_obs()
+
+    def save_replay(self):
+        self.env.save_replay()
 
 
     def render(self, mode='human'):

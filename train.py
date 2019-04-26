@@ -1,19 +1,22 @@
 import argparse
+import pickle
+import time
+
 import numpy as np
 import tensorflow as tf
-import time
-import pickle
-from gym import spaces
+import tensorflow.contrib.layers as layers
 
 import maddpg.common.tf_util as U
+from gym_smac.envs import SMACEnv
 from maddpg.trainer.maddpg import MADDPGAgentTrainer
 from maddpg_advantage import MADDPGAdvantageAgentTrainer
-import tensorflow.contrib.layers as layers
+
 
 def parse_args():
     parser = argparse.ArgumentParser("Reinforcement Learning experiments for multiagent environments")
     # Environment
     parser.add_argument("--scenario", type=str, default="simple", help="name of the scenario script, or smac for Starcraft Multi Agent Challenge")
+    parser.add_argument("--replay-dir", type=str, default="./experiments/replays", help="directory in which replays are saved")
     parser.add_argument("--map", type=str, default="8m", help="If using SMAC, the starcraft map to train on")
     parser.add_argument("--max-episode-len", type=int, default=25, help="maximum episode length")
     parser.add_argument("--num-episodes", type=int, default=60000, help="number of episodes")
@@ -29,9 +32,9 @@ def parse_args():
     parser.add_argument("--num-units", type=int, default=64, help="number of units in the mlp")
     # Checkpointing
     parser.add_argument("--exp-name", type=str, default=None, help="name of the experiment")
-    parser.add_argument("--save-dir", type=str, default="/tmp/policy/", help="directory in which training state and model should be saved")
+    parser.add_argument("--save-dir", type=str, default="./experiments/policy/", help="directory in which training state and model should be saved")
     parser.add_argument("--save-rate", type=int, default=1000, help="save model once every time this many episodes are completed")
-    parser.add_argument("--load-dir", type=str, default="./experiments/", help="directory in which training state and model are loaded")
+    parser.add_argument("--load-dir", type=str, default="./experiments/policy/", help="directory in which training state and model are loaded")
     # Evaluation
     parser.add_argument("--restore", action="store_true", default=False)
     parser.add_argument("--display", action="store_true", default=False)
@@ -54,8 +57,7 @@ def make_env(scenario_name, arglist, benchmark=False):
 
     if scenario_name == "starcraft" or scenario_name == "smac":
         # Make a Starcraft environment
-        from gym_smac.envs import SMACEnv
-        env = SMACEnv(map_name=arglist.map)
+        env = SMACEnv(map_name=arglist.map, replay_prefix=arglist.exp_name, replay_dir=arglist.save_dir)
     else:
         # Make a multiagent world environment
         from multiagent.environment import MultiAgentEnv
@@ -179,6 +181,9 @@ def train(arglist):
             # save model, display training output
             if terminal and (len(episode_rewards) % arglist.save_rate == 0):
                 U.save_state(arglist.save_dir, saver=saver)
+                # Save the replay
+                if isinstance(env, SMACEnv):
+                    env.save_replay()
                 # print statement depends on whether or not there are adversaries
                 if num_adversaries == 0:
                     print("steps: {}, episodes: {}, mean episode reward: {}, time: {}".format(
